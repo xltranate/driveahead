@@ -1,276 +1,339 @@
-// MODULE ALIASES (Shortcuts for Matter.js)
-const Engine = Matter.Engine,
-      Render = Matter.Render,
-      Runner = Matter.Runner,
-      Bodies = Matter.Bodies,
-      Body = Matter.Body,
-      Composite = Matter.Composite,
-      Constraint = Matter.Constraint,
-      Events = Matter.Events,
-      Vector = Matter.Vector;
+const { Engine, Render, Runner, Bodies, Body, Composite, Constraint, Events, Vector } = Matter;
 
-// GAME STATE
-let engine, render, runner;
-let playerCar;
-let gameRunning = false;
-let startTime = 0;
-let waterLevel = 0;
-let bladeBody = null;
-let selectedCarType = 'buggy';
-let selectedMapType = 'bowl';
+// --- CONFIGURATION ---
+const CAT_DEFAULT = 0x0001;
+const CAT_P1 = 0x0002; // Player 1 parts
+const CAT_P2 = 0x0004; // Player 2 parts
+const CAT_WALL = 0x0008;
 
-// CONFIGURATION
 const width = window.innerWidth;
 const height = window.innerHeight;
-const CATEGORY_CAR = 0x0001;
-const CATEGORY_TERRAIN = 0x0002;
-const CATEGORY_HAZARD = 0x0004;
 
-// --- SETUP & UTILS ---
+let engine, render, runner;
+let p1, p2; // Car objects
+let scores = { p1: 0, p2: 0 };
+let gameActive = false;
+let roundStartTime = 0;
+let waterLevel = 0;
+let waterRising = false;
 
-function selectCar(type) {
-    selectedCarType = type;
-    document.querySelectorAll('#car-select .btn').forEach(b => b.classList.remove('active'));
+let config = {
+    p1Car: 'racer',
+    p2Car: 'racer',
+    map: 'stadium'
+};
+
+// --- INITIALIZATION ---
+
+function setCar(player, type) {
+    if(player === 1) config.p1Car = type;
+    else config.p2Car = type;
+    
+    // UI Update
+    const parent = player === 1 ? '#p1-select' : '#p2-select';
+    document.querySelectorAll(`${parent} .btn`).forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
 }
 
-function selectMap(type) {
-    selectedMapType = type;
+function setMap(type) {
+    config.map = type;
     document.querySelectorAll('#map-select .btn').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
 }
 
-function initGame() {
+function startGame() {
     document.getElementById('menu-screen').style.display = 'none';
     document.getElementById('game-hud').style.display = 'block';
     
-    // 1. Setup Engine
+    // Setup Engine
     engine = Engine.create();
-    engine.world.gravity.y = 1; // Standard gravity
+    engine.world.gravity.y = 0.9; // Arcade gravity
 
-    // 2. Setup Renderer
     render = Render.create({
         element: document.body,
         engine: engine,
         options: {
-            width: width,
-            height: height,
-            wireframes: false, // Set to false for solid colors
-            background: '#1a1a1a'
+            width, height,
+            wireframes: false,
+            background: '#1a1a24'
         }
     });
 
-    // 3. Create World
-    createMap(selectedMapType);
-    playerCar = createCar(width / 2, height / 2 - 100, selectedCarType);
-    
-    // 4. Run
+    // Custom Render Loop for Water
+    Events.on(render, 'afterRender', drawWater);
+
+    // Collision Event
+    Events.on(engine, 'collisionStart', handle collisions);
+
+    // Run
     Render.run(render);
     runner = Runner.create();
     Runner.run(runner, engine);
+
+    startRound();
     
-    gameRunning = true;
-    startTime = Date.now();
-    
-    // 5. Game Loop (Logic that Matter.js doesn't handle)
+    // Input Loop
     Events.on(engine, 'beforeUpdate', gameLoop);
-    
-    // 6. Collision Detection (Head hits ground)
-    Events.on(engine, 'collisionStart', handleCollisions);
 }
 
-// --- CAR FACTORY ---
-// Builds complex cars using constraints (springs) for suspension
-function createCar(x, y, type) {
-    const group = Body.nextGroup(true);
-    let chassis, w1, w2;
-    let speed = 0.05;
+function startRound() {
+    Composite.clear(engine.world);
+    Engine.clear(engine);
+    
+    gameActive = true;
+    waterLevel = 0;
+    waterRising = false;
+    roundStartTime = Date.now();
+    document.getElementById('sudden-death').style.display = 'none';
+    document.getElementById('round-screen').style.display = 'none';
 
-    // Car Specs
-    const specs = {
-        buggy: { w: 140, h: 30, color: '#00ffcc', wheelSize: 25, speed: 0.004 },
-        tank:  { w: 160, h: 50, color: '#556655', wheelSize: 35, speed: 0.002 },
-        dragster: { w: 160, h: 20, color: '#ff0055', wheelSize: 30, speed: 0.006 }
-    };
-    const s = specs[type];
+    createMap(config.map);
+    
+    // Spawn Players (Left and Right sides)
+    p1 = createCar(width * 0.2, height * 0.5, config.p1Car, 1);
+    p2 = createCar(width * 0.8, height * 0.5, config.p2Car, 2);
+}
 
-    // Chassis (The Body)
-    chassis = Bodies.rectangle(x, y, s.w, s.h, { 
-        collisionFilter: { group: group },
-        density: 0.002,
-        render: { fillStyle: s.color }
+function nextRound() {
+    startRound();
+}
+
+// --- CAR FACTORY (POLISHED MODELS) ---
+
+function createCar(x, y, type, playerID) {
+    const isP1 = playerID === 1;
+    const color = isP1 ? '#00f3ff' : '#ff0055'; // Cyan vs Pink
+    const group = Body.nextGroup(true); // Self-collision ignore
+    const category = isP1 ? CAT_P1 : CAT_P2;
+    const mask = CAT_WALL | (isP1 ? CAT_P2 : CAT_P1); // Collide with walls and ENEMY
+
+    let chassisParts = [];
+    let wheelOffsets = [];
+    let wheelSize = 20;
+    let speed = 0.005;
+
+    // --- MODEL DESIGN ---
+    if (type === 'racer') {
+        // F1 Style
+        speed = 0.008;
+        wheelSize = 22;
+        wheelOffsets = [-50, 50];
+        
+        const base = Bodies.rectangle(x, y, 140, 20, { render: { fillStyle: color } });
+        const cockpit = Bodies.trapezoid(x - 10, y - 20, 50, 30, 0.4, { render: { fillStyle: '#333' } });
+        const spoilerV = Bodies.rectangle(x - 60, y - 20, 5, 30, { render: { fillStyle: '#fff' } });
+        const spoilerH = Bodies.rectangle(x - 60, y - 35, 40, 5, { render: { fillStyle: '#fff' } });
+        const nose = Bodies.polygon(x + 70, y + 5, 3, 15, { angle: Math.PI/2, render: { fillStyle: color } });
+        
+        chassisParts = [base, cockpit, spoilerV, spoilerH, nose];
+    } 
+    else if (type === 'truck') {
+        // Monster Truck
+        speed = 0.005;
+        wheelSize = 35;
+        wheelOffsets = [-55, 55];
+
+        const base = Bodies.rectangle(x, y, 130, 30, { render: { fillStyle: '#444' } });
+        const body = Bodies.rectangle(x - 10, y - 25, 140, 40, { render: { fillStyle: color } });
+        const roof = Bodies.trapezoid(x - 15, y - 55, 90, 30, 0.3, { render: { fillStyle: color } });
+        const rollbar = Bodies.rectangle(x + 40, y - 50, 10, 50, { render: { fillStyle: '#999' } });
+        
+        chassisParts = [base, body, roof, rollbar];
+    }
+    else if (type === 'tank') {
+        // Tank
+        speed = 0.004;
+        wheelSize = 24;
+        wheelOffsets = [-40, 0, 40]; // 3 Wheels!
+
+        const hull = Bodies.trapezoid(x, y, 140, 50, 0.2, { render: { fillStyle: '#556' } });
+        const turret = Bodies.circle(x, y - 35, 25, { render: { fillStyle: color } });
+        const barrel = Bodies.rectangle(x + 50, y - 35, 70, 12, { render: { fillStyle: '#888' } });
+        
+        chassisParts = [hull, turret, barrel];
+    }
+
+    // 1. Create Chassis
+    const chassis = Body.create({
+        parts: chassisParts,
+        collisionFilter: { group, category, mask }
     });
 
-    // The "Head" (Vulnerable Point) - Fixed on top of chassis
-    const head = Bodies.circle(x, y - s.h, 15, {
-        collisionFilter: { group: group },
+    // 2. Create Head (The Weak Point)
+    // Attached rigidly to the center-top of the car
+    const head = Bodies.circle(x, y - 50, 14, {
         density: 0.001,
-        render: { fillStyle: '#ffffff' },
-        label: 'head'
-    });
-    
-    // Wheels
-    w1 = Bodies.circle(x - s.w/2 + 10, y + s.h, s.wheelSize, { 
-        collisionFilter: { group: group },
-        friction: 0.9, // High friction for grip
-        density: 0.01,
-        render: { fillStyle: '#222', strokeStyle: '#555', lineWidth: 3 }
-    });
-    
-    w2 = Bodies.circle(x + s.w/2 - 10, y + s.h, s.wheelSize, { 
-        collisionFilter: { group: group },
-        friction: 0.9,
-        density: 0.01,
-        render: { fillStyle: '#222', strokeStyle: '#555', lineWidth: 3 }
+        label: `head_${playerID}`,
+        render: { fillStyle: '#ffeaa7', strokeStyle: '#000', lineWidth: 2 },
+        collisionFilter: { group, category, mask }
     });
 
-    // Suspension (Constraints connecting wheels to body)
-    const axelA = Constraint.create({
-        bodyA: chassis, pointA: { x: -s.w/2 + 10, y: s.h/2 },
-        bodyB: w1, pointB: { x: 0, y: 0 },
-        stiffness: 0.2, damping: 0.1, length: s.wheelSize + 5
-    });
-
-    const axelB = Constraint.create({
-        bodyA: chassis, pointA: { x: s.w/2 - 10, y: s.h/2 },
-        bodyB: w2, pointB: { x: 0, y: 0 },
-        stiffness: 0.2, damping: 0.1, length: s.wheelSize + 5
-    });
-
-    // Attach Head to Body rigidly
     const headMount = Constraint.create({
-        bodyA: chassis, pointA: { x: -10, y: -s.h/2 - 5 },
-        bodyB: head, pointB: { x: 0, y: 0 },
-        stiffness: 1, length: 0
+        bodyA: chassis, bodyB: head,
+        pointA: { x: -10, y: -40 }, pointB: { x: 0, y: 0 },
+        stiffness: 1, length: 0, render: { visible: false }
     });
 
-    Composite.add(engine.world, [chassis, head, w1, w2, axelA, axelB, headMount]);
+    // 3. Create Wheels & Suspension
+    let wheels = [];
+    let constraints = [];
 
-    return { body: chassis, w1: w1, w2: w2, speed: s.speed };
+    wheelOffsets.forEach(offsetX => {
+        const w = Bodies.circle(x + offsetX, y + 20, wheelSize, {
+            friction: 1, density: 0.02,
+            collisionFilter: { group, category, mask },
+            render: { fillStyle: '#111', strokeStyle: '#555', lineWidth: 3 }
+        });
+        
+        const shock = Constraint.create({
+            bodyA: chassis, bodyB: w,
+            pointA: { x: offsetX, y: 10 }, pointB: { x: 0, y: 0 },
+            stiffness: 0.4, damping: 0.2, length: 0,
+            render: { visible: false }
+        });
+
+        wheels.push(w);
+        constraints.push(shock);
+    });
+
+    Composite.add(engine.world, [chassis, head, headMount, ...wheels, ...constraints]);
+
+    return { body: chassis, wheels, speed, head };
 }
 
-// --- MAP FACTORY ---
-function createMap(type) {
-    const wallOpts = { isStatic: true, render: { fillStyle: '#444' } };
-    const walls = [
-        Bodies.rectangle(width/2, height + 50, width, 100, wallOpts), // Floor
-        Bodies.rectangle(-50, height/2, 100, height, wallOpts), // Left Wall
-        Bodies.rectangle(width + 50, height/2, 100, height, wallOpts) // Right Wall
-    ];
+// --- MAP BUILDER ---
 
-    if (type === 'bowl') {
-        walls.push(Bodies.rectangle(100, height - 100, 400, 20, { isStatic: true, angle: 0.5, render: {fillStyle:'#666'} }));
-        walls.push(Bodies.rectangle(width - 100, height - 100, 400, 20, { isStatic: true, angle: -0.5, render: {fillStyle:'#666'} }));
-    } else if (type === 'ramps') {
-        walls.push(Bodies.rectangle(width/2, height - 200, 200, 20, wallOpts));
-        walls.push(Bodies.rectangle(200, height - 100, 200, 20, {isStatic:true, angle: -0.3, render:{fillStyle:'#666'}}));
+function createMap(type) {
+    const wallStyle = { fillStyle: '#2d3436' };
+    const walls = [];
+
+    // Boundaries
+    walls.push(Bodies.rectangle(width/2, height + 60, width, 120, { isStatic: true, render: wallStyle, label: 'ground' })); // Floor
+    walls.push(Bodies.rectangle(-60, height/2, 120, height*3, { isStatic: true, render: wallStyle })); // Left
+    walls.push(Bodies.rectangle(width+60, height/2, 120, height*3, { isStatic: true, render: wallStyle })); // Right
+    walls.push(Bodies.rectangle(width/2, -500, width, 100, { isStatic: true })); // Ceiling
+
+    if (type === 'stadium') {
+        // Classic U-Shape
+        walls.push(Bodies.rectangle(100, height-100, 400, 30, { isStatic: true, angle: 0.4, render: wallStyle }));
+        walls.push(Bodies.rectangle(width-100, height-100, 400, 30, { isStatic: true, angle: -0.4, render: wallStyle }));
+    }
+    else if (type === 'seesaw') {
+        // Center Pivot
+        const pivot = Bodies.rectangle(width/2, height-50, 20, 100, { isStatic: true, render: { fillStyle: '#7f8c8d' } });
+        const plank = Bodies.rectangle(width/2, height-150, 700, 20, { 
+            render: { fillStyle: '#e67e22' }, density: 0.005 
+        });
+        const joint = Constraint.create({
+            bodyA: pivot, bodyB: plank,
+            pointA: { x: 0, y: -50 }, pointB: { x: 0, y: 0 },
+            stiffness: 1, length: 0, render: { visible: false }
+        });
+        Composite.add(engine.world, [pivot, plank, joint]);
+    }
+    else if (type === 'ufo') {
+        // Floating platforms
+        walls.push(Bodies.rectangle(width/2, height-250, 300, 40, { isStatic: true, render: { fillStyle: '#8e44ad' } }));
+        walls.push(Bodies.rectangle(150, height-400, 200, 20, { isStatic: true, render: { fillStyle: '#9b59b6' } }));
+        walls.push(Bodies.rectangle(width-150, height-400, 200, 20, { isStatic: true, render: { fillStyle: '#9b59b6' } }));
     }
 
     Composite.add(engine.world, walls);
 }
 
-// --- HAZARDS ---
-function spawnBlade() {
-    if (bladeBody) return;
-    
-    bladeBody = Bodies.rectangle(width/2, -200, 600, 40, {
-        isStatic: false, // Can move but we control velocity manually
-        isSensor: true, // Passes through but detects collision? No, we want it to crush.
-        mass: 10000,
-        render: { fillStyle: '#ff0000' },
-        label: 'blade'
-    });
-    // Another cross piece for the blade
-    const bladeCross = Bodies.rectangle(width/2, -200, 40, 600, {
-        render: { fillStyle: '#ff0000' }
-    });
-    
-    // Combine into one body? For simplicity, just one bar spinning
-    Composite.add(engine.world, bladeBody);
-    
-    document.getElementById('hazard-warning').style.opacity = 1;
-}
+// --- GAME LOGIC ---
 
-// --- GAME LOOP ---
+const keys = {};
+window.onkeydown = e => keys[e.code] = true;
+window.onkeyup = e => keys[e.code] = false;
+
 function gameLoop() {
-    if (!gameRunning) return;
+    if (!gameActive) return;
 
-    // 1. Controls (Apply Force)
-    // Left/Right arrows or A/D
-    const keys = keysDown;
-    if (keys['ArrowRight'] || keys['KeyD']) {
-        Body.setAngularVelocity(playerCar.w1, 0.4);
-        Body.setAngularVelocity(playerCar.w2, 0.4);
-        // Add slight forward force to chassis for air control
-        Body.applyForce(playerCar.body, playerCar.body.position, { x: playerCar.speed, y: 0 });
+    // --- SUDDEN DEATH ---
+    if (!waterRising && (Date.now() - roundStartTime > 15000)) { // 15 seconds
+        waterRising = true;
+        document.getElementById('sudden-death').style.display = 'block';
     }
-    if (keys['ArrowLeft'] || keys['KeyA']) {
-        Body.setAngularVelocity(playerCar.w1, -0.4);
-        Body.setAngularVelocity(playerCar.w2, -0.4);
-        Body.applyForce(playerCar.body, playerCar.body.position, { x: -playerCar.speed, y: 0 });
-    }
+    if (waterRising) waterLevel += 0.8;
 
-    // 2. Rising Water Logic
-    const timeAlive = (Date.now() - startTime) / 1000;
-    document.getElementById('timer').innerText = `Time: ${timeAlive.toFixed(1)}s`;
-
-    // Render Water Overlay
-    waterLevel += 0.2; // Pixels per frame
-    const ctx = render.context;
-    ctx.fillStyle = 'rgba(0, 150, 255, 0.4)';
-    ctx.fillRect(0, height - waterLevel, width, waterLevel);
+    // --- CONTROLS ---
     
+    // Player 1 (A/D)
+    if (keys['KeyD']) applyDrive(p1, 1);
+    if (keys['KeyA']) applyDrive(p1, -1);
+
+    // Player 2 (Arrows)
+    if (keys['ArrowRight']) applyDrive(p2, 1);
+    if (keys['ArrowLeft']) applyDrive(p2, -1);
+
     // Water Death Check
-    if (playerCar.body.position.y > height - waterLevel) {
-        endGame("Drowned!");
-    }
-
-    // 3. Blade Logic (Spawns after 10 seconds)
-    if (timeAlive > 10 && !bladeBody) {
-        spawnBlade();
-    }
-    if (bladeBody) {
-        Body.setPosition(bladeBody, { x: width/2, y: bladeBody.position.y + 1 });
-        Body.setAngularVelocity(bladeBody, 0.1);
-        // Blade collision check
-        if (Matter.Collision.collides(playerCar.body, bladeBody) != null) {
-            // physics will handle crush, but we can force kill
-        }
-    }
+    if (p1.head.position.y > height - waterLevel) endRound(2, "DROWNED");
+    if (p2.head.position.y > height - waterLevel) endRound(1, "DROWNED");
 }
 
-// --- INPUT HANDLING ---
-const keysDown = {};
-window.addEventListener('keydown', e => keysDown[e.code] = true);
-window.addEventListener('keyup', e => keysDown[e.code] = false);
+function applyDrive(car, dir) {
+    const force = car.speed * dir;
+    // Apply angular velocity to wheels for grip
+    car.wheels.forEach(w => Body.setAngularVelocity(w, 0.4 * dir));
+    // Apply vector force to body for air control
+    Body.applyForce(car.body, car.body.position, { x: force, y: 0 });
+}
 
-// --- COLLISION LOGIC ---
-function handleCollisions(event) {
-    const pairs = event.pairs;
+function drawWater() {
+    if (waterLevel <= 0) return;
+    const ctx = render.context;
+    ctx.fillStyle = 'rgba(0, 150, 255, 0.6)';
+    ctx.fillRect(0, height - waterLevel, width, waterLevel);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, height - waterLevel, width, 5); // Foam line
+}
+
+function handlecollisions(event) {
+    if (!gameActive) return;
+
+    event.pairs.forEach(pair => {
+        const { bodyA, bodyB } = pair;
+        const labelA = bodyA.label || '';
+        const labelB = bodyB.label || '';
+
+        // Check Heads
+        if (labelA.includes('head_')) checkHeadHit(labelA, bodyB);
+        if (labelB.includes('head_')) checkHeadHit(labelB, bodyA);
+    });
+}
+
+function checkHeadHit(headLabel, otherBody) {
+    // Extract player ID from label "head_1" or "head_2"
+    const victimID = parseInt(headLabel.split('_')[1]);
+    const killerID = victimID === 1 ? 2 : 1;
+
+    // Ignore collisions with own car parts (filtered by masks usually, but safe check)
+    // Ignore sensors
+    if (otherBody.isSensor) return;
+
+    // In DA, touching the ground with your head kills you too
+    endRound(killerID, "CRUSHED");
+}
+
+function endRound(winnerID, reason) {
+    if (!gameActive) return;
+    gameActive = false;
+
+    // Update Score
+    if (winnerID === 1) scores.p1++;
+    else scores.p2++;
     
-    for (let i = 0; i < pairs.length; i++) {
-        const bodyA = pairs[i].bodyA;
-        const bodyB = pairs[i].bodyB;
+    document.getElementById('score-1').innerText = scores.p1;
+    document.getElementById('score-2').innerText = scores.p2;
 
-        // Check if 'head' touched anything that isn't its own car parts
-        // Note: In a complex setup, we'd use collisionFilters, but simple label check works for now
-        if (bodyA.label === 'head' || bodyB.label === 'head') {
-            const other = (bodyA.label === 'head') ? bodyB : bodyA;
-            
-            // If head touches ground, blade, or walls (but not own car parts if filtered correctly)
-            // For this demo, assuming other parts are safe via group filter, except ground/blade
-            if (!other.isSensor) {
-                endGame("Head Trauma!");
-            }
-        }
-    }
-}
-
-function endGame(reason) {
-    gameRunning = false;
-    Runner.stop(runner);
-    document.getElementById('game-hud').style.display = 'none';
-    document.getElementById('game-over-screen').style.display = 'block';
-    document.getElementById('go-reason').innerText = reason;
-    document.getElementById('go-title').innerText = "WASTED";
+    // Show Screen
+    const color = winnerID === 1 ? 'var(--p1-color)' : 'var(--p2-color)';
+    const name = winnerID === 1 ? 'BLUE' : 'RED';
+    
+    const title = document.getElementById('winner-text');
+    title.innerText = `${name} WINS`;
+    title.style.color = color;
+    
+    document.getElementById('round-screen').style.display = 'block';
 }
