@@ -3,46 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drive Ahead: Pro Web Edition</title>
+    <title>Drive Ahead: 1v1 Arena</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 </head>
 <body>
 
     <div id="ui-layer">
         <div id="menu-screen">
-            <h1 class="glitch-text">DRIVE SURVIVAL</h1>
+            <h1 class="title-text">HEAD<br><span style="color:#fff">CRUSHER</span><br>1v1</h1>
             
-            <div class="selector-container">
-                <h3>SELECT VEHICLE</h3>
-                <div class="btn-group" id="car-select">
-                    <button class="btn active" onclick="selectCar('buggy')">Dune Buggy</button>
-                    <button class="btn" onclick="selectCar('tank')">Battle Tank</button>
-                    <button class="btn" onclick="selectCar('dragster')">Speed Dragster</button>
+            <div class="panel-row">
+                <div class="player-box p1-box">
+                    <h3>PLAYER 1 (WASD)</h3>
+                    <div class="grid-select" id="p1-select">
+                        <button class="btn active" onclick="setCar(1, 'racer')">🏎️ FORMULA</button>
+                        <button class="btn" onclick="setCar(1, 'truck')">🚚 MONSTER</button>
+                        <button class="btn" onclick="setCar(1, 'tank')">🛡️ PANZER</button>
+                    </div>
+                </div>
+
+                <div class="player-box p2-box">
+                    <h3>PLAYER 2 (ARROWS)</h3>
+                    <div class="grid-select" id="p2-select">
+                        <button class="btn active" onclick="setCar(2, 'racer')">🏎️ FORMULA</button>
+                        <button class="btn" onclick="setCar(2, 'truck')">🚚 MONSTER</button>
+                        <button class="btn" onclick="setCar(2, 'tank')">🛡️ PANZER</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="selector-container">
-                <h3>SELECT ARENA</h3>
-                <div class="btn-group" id="map-select">
-                    <button class="btn active" onclick="selectMap('bowl')">The Bowl</button>
-                    <button class="btn" onclick="selectMap('ramps')">Twin Peaks</button>
-                    <button class="btn" onclick="selectMap('flat')">Flatlands</button>
+            <div class="selector-box">
+                <h3>ARENA</h3>
+                <div class="map-select" id="map-select">
+                    <button class="btn active" onclick="setMap('stadium')">🏟️ STADIUM</button>
+                    <button class="btn" onclick="setMap('seesaw')">⚖️ SEESAW</button>
+                    <button class="btn" onclick="setMap('ufo')">👽 MOTHERSHIP</button>
                 </div>
             </div>
 
-            <button id="start-btn" onclick="initGame()">IGNITION</button>
+            <button id="start-btn" onclick="startGame()">FIGHT!</button>
         </div>
 
         <div id="game-hud" style="display: none;">
-            <div id="timer">Time: 0.0s</div>
-            <div id="hazard-warning">⚠️ HAZARD WARNING ⚠️</div>
+            <div class="score-board">
+                <div class="p1-score"><span id="score-1">0</span></div>
+                <div class="timer-box" id="timer">VS</div>
+                <div class="p2-score"><span id="score-2">0</span></div>
+            </div>
+            <div id="sudden-death">🌊 RISING WATER 🌊</div>
         </div>
 
-        <div id="game-over-screen" style="display: none;">
-            <h1 id="go-title">CRASHED</h1>
-            <p id="go-reason">Head Trauma</p>
-            <button class="btn" onclick="location.reload()">RETRY</button>
+        <div id="round-screen" style="display: none;">
+            <h1 id="winner-text">BLUE WINS</h1>
+            <button class="btn blink" onclick="nextRound()">NEXT ROUND</button>
         </div>
     </div>
 
