@@ -2,8 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drive Ahead: 1v1 Arena</title>
+    <title>Drive Ahead xltranate</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
@@ -12,24 +11,24 @@
 
     <div id="ui-layer">
         <div id="menu-screen">
-            <h1 class="title-text">HEAD<br><span style="color:#fff">CRUSHER</span><br>1v1</h1>
+            <h1 class="title-text">HEAD<br>CRUSHER</h1>
             
             <div class="panel-row">
                 <div class="player-box p1-box">
-                    <h3>PLAYER 1 (WASD)</h3>
+                    <h3>P1 (WASD)</h3>
                     <div class="grid-select" id="p1-select">
-                        <button class="btn active" onclick="setCar(1, 'racer')">🏎️ FORMULA</button>
-                        <button class="btn" onclick="setCar(1, 'truck')">🚚 MONSTER</button>
-                        <button class="btn" onclick="setCar(1, 'tank')">🛡️ PANZER</button>
+                        <button class="btn active" data-type="racer" onclick="uiSetCar(1, 'racer', this)">🏎️ RACER</button>
+                        <button class="btn" data-type="truck" onclick="uiSetCar(1, 'truck', this)">🚚 TRUCK</button>
+                        <button class="btn" data-type="tank" onclick="uiSetCar(1, 'tank', this)">🛡️ TANK</button>
                     </div>
                 </div>
 
                 <div class="player-box p2-box">
-                    <h3>PLAYER 2 (ARROWS)</h3>
+                    <h3>P2 (ARROWS)</h3>
                     <div class="grid-select" id="p2-select">
-                        <button class="btn active" onclick="setCar(2, 'racer')">🏎️ FORMULA</button>
-                        <button class="btn" onclick="setCar(2, 'truck')">🚚 MONSTER</button>
-                        <button class="btn" onclick="setCar(2, 'tank')">🛡️ PANZER</button>
+                        <button class="btn active" data-type="racer" onclick="uiSetCar(2, 'racer', this)">🏎️ RACER</button>
+                        <button class="btn" data-type="truck" onclick="uiSetCar(2, 'truck', this)">🚚 TRUCK</button>
+                        <button class="btn" data-type="tank" onclick="uiSetCar(2, 'tank', this)">🛡️ TANK</button>
                     </div>
                 </div>
             </div>
@@ -37,29 +36,55 @@
             <div class="selector-box">
                 <h3>ARENA</h3>
                 <div class="map-select" id="map-select">
-                    <button class="btn active" onclick="setMap('stadium')">🏟️ STADIUM</button>
-                    <button class="btn" onclick="setMap('seesaw')">⚖️ SEESAW</button>
-                    <button class="btn" onclick="setMap('ufo')">👽 MOTHERSHIP</button>
+                    <button class="btn active" onclick="uiSetMap('stadium', this)">🏟️ STADIUM</button>
+                    <button class="btn" onclick="uiSetMap('seesaw', this)">⚖️ SEESAW</button>
+                    <button class="btn" onclick="uiSetMap('ufo', this)">👽 UFO</button>
                 </div>
             </div>
 
-            <button id="start-btn" onclick="startGame()">FIGHT!</button>
+            <button id="start-btn" onclick="uiStartGame()">START FIGHT</button>
         </div>
 
-        <div id="game-hud" style="display: none;">
+        <div id="game-hud" style="display: none; width: 100%;">
             <div class="score-board">
-                <div class="p1-score"><span id="score-1">0</span></div>
-                <div class="timer-box" id="timer">VS</div>
-                <div class="p2-score"><span id="score-2">0</span></div>
+                <div class="p1-score" id="score-1">0</div>
+                <div class="timer-box" id="timer">15.0</div>
+                <div class="p2-score" id="score-2">0</div>
             </div>
-            <div id="sudden-death">🌊 RISING WATER 🌊</div>
+            <div id="sudden-death" style="display:none; position:absolute; top:80px; width:100%; text-align:center; color:red;">SUDDEN DEATH!</div>
         </div>
 
         <div id="round-screen" style="display: none;">
             <h1 id="winner-text">BLUE WINS</h1>
-            <button class="btn blink" onclick="nextRound()">NEXT ROUND</button>
+            <button class="btn" onclick="uiNextRound()">NEXT ROUND</button>
         </div>
     </div>
+
+    <script>
+        // These bridge the HTML to the game.js
+        function uiSetCar(p, type, el) {
+            if(p === 1) config.p1Car = type;
+            else config.p2Car = type;
+            const group = el.parentElement.querySelectorAll('.btn');
+            group.forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function uiSetMap(type, el) {
+            config.map = type;
+            const group = el.parentElement.querySelectorAll('.btn');
+            group.forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function uiStartGame() {
+            startGame(); // Calls the function in game.js
+        }
+
+        function uiNextRound() {
+            nextRound(); // Calls the function in game.js
+        }
+    </script>
 
     <script src="game.js"></script>
 </body>
