@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drive Ahead: Pro Web Edition</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="menu-screen">
+            <h1 class="glitch-text">DRIVE SURVIVAL</h1>
+            
+            <div class="selector-container">
+                <h3>SELECT VEHICLE</h3>
+                <div class="btn-group" id="car-select">
+                    <button class="btn active" onclick="selectCar('buggy')">Dune Buggy</button>
+                    <button class="btn" onclick="selectCar('tank')">Battle Tank</button>
+                    <button class="btn" onclick="selectCar('dragster')">Speed Dragster</button>
+                </div>
+            </div>
+
+            <div class="selector-container">
+                <h3>SELECT ARENA</h3>
+                <div class="btn-group" id="map-select">
+                    <button class="btn active" onclick="selectMap('bowl')">The Bowl</button>
+                    <button class="btn" onclick="selectMap('ramps')">Twin Peaks</button>
+                    <button class="btn" onclick="selectMap('flat')">Flatlands</button>
+                </div>
+            </div>
+
+            <button id="start-btn" onclick="initGame()">IGNITION</button>
+        </div>
+
+        <div id="game-hud" style="display: none;">
+            <div id="timer">Time: 0.0s</div>
+            <div id="hazard-warning">⚠️ HAZARD WARNING ⚠️</div>
+        </div>
+
+        <div id="game-over-screen" style="display: none;">
+            <h1 id="go-title">CRASHED</h1>
+            <p id="go-reason">Head Trauma</p>
+            <button class="btn" onclick="location.reload()">RETRY</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
