@@ -1,6 +1,5 @@
 const { Engine, Render, Runner, Bodies, Body, Composite, Constraint, Events, Vector } = Matter;
 
-// --- CONFIG ---
 const width = window.innerWidth;
 const height = window.innerHeight;
 
@@ -12,30 +11,19 @@ let roundStartTime = 0;
 let waterLevel = 0;
 let waterRising = false;
 
-// Global Config Object (Modified by UI)
-window.config = {
-    p1Car: 'racer',
-    p2Car: 'racer',
-    map: 'stadium'
-};
-
-// --- CORE GAME FUNCTIONS ---
+window.config = { p1Car: 'racer', p2Car: 'racer', map: 'stadium' };
 
 window.startGame = function() {
     document.getElementById('menu-screen').style.display = 'none';
     document.getElementById('game-hud').style.display = 'block';
     
     engine = Engine.create();
-    engine.world.gravity.y = 1.2; // Heavier gravity so they don't float away
+    engine.world.gravity.y = 1.2;
 
     render = Render.create({
         element: document.body,
         engine: engine,
-        options: {
-            width, height,
-            wireframes: false,
-            background: '#1a1a24'
-        }
+        options: { width, height, wireframes: false, background: '#111' }
     });
 
     Render.run(render);
@@ -51,7 +39,6 @@ window.startGame = function() {
 
 function startRound() {
     Composite.clear(engine.world);
-    
     gameActive = true;
     waterLevel = 0;
     waterRising = false;
@@ -62,16 +49,14 @@ function startRound() {
 
     createMap(window.config.map);
     
-    // SPAWN POINTS: Lowered and centered so they don't fall off
-    p1 = createCar(width * 0.3, height - 200, window.config.p1Car, 1);
-    p2 = createCar(width * 0.7, height - 200, window.config.p2Car, 2);
+    // Spawning players well within the map boundaries
+    p1 = createCar(width * 0.2, height - 150, window.config.p1Car, 1);
+    p2 = createCar(width * 0.8, height - 150, window.config.p2Car, 2);
 }
 
-window.nextRound = function() {
-    startRound();
-};
+window.nextRound = () => startRound();
 
-// --- IMPROVED VEHICLE MODELS ---
+// --- CARS WITH EXPLOSION CAPABILITY ---
 
 function createCar(x, y, type, playerID) {
     const isP1 = playerID === 1;
@@ -80,93 +65,80 @@ function createCar(x, y, type, playerID) {
 
     let chassisParts = [];
     let wheelSize = 25;
-    let speed = 0.007;
+    let speed = 0.008;
 
-    // Design the bodies
     if (type === 'racer') {
-        const base = Bodies.rectangle(x, y, 120, 20, { render: { fillStyle: color } });
-        const wing = Bodies.rectangle(x - 50, y - 20, 10, 40, { render: { fillStyle: '#fff' } });
-        chassisParts = [base, wing];
+        chassisParts = [Bodies.rectangle(x, y, 120, 20, { render: { fillStyle: color } })];
         wheelSize = 22;
     } else if (type === 'truck') {
-        const base = Bodies.rectangle(x, y, 110, 40, { render: { fillStyle: color } });
-        const cab = Bodies.rectangle(x + 20, y - 30, 50, 40, { render: { fillStyle: color } });
-        chassisParts = [base, cab];
-        wheelSize = 32;
+        chassisParts = [Bodies.rectangle(x, y, 110, 45, { render: { fillStyle: color } })];
+        wheelSize = 34;
     } else {
-        const base = Bodies.trapezoid(x, y, 130, 40, 0.4, { render: { fillStyle: color } });
-        chassisParts = [base];
-        wheelSize = 25;
+        chassisParts = [Bodies.trapezoid(x, y, 130, 40, 0.4, { render: { fillStyle: color } })];
     }
 
-    const chassis = Body.create({
-        parts: chassisParts,
-        collisionFilter: { group },
-        friction: 0.1,
-        restitution: 0.2 // Slight bounce
-    });
+    const chassis = Body.create({ parts: chassisParts, collisionFilter: { group }, friction: 0.1 });
+    const head = Bodies.circle(x, y - 45, 15, { label: `head_${playerID}`, collisionFilter: { group }, render: { fillStyle: '#ffeaa7' } });
+    const headMount = Constraint.create({ bodyA: chassis, bodyB: head, pointA: { x: 0, y: -20 }, stiffness: 0.8, length: 0, render: { visible: false } });
 
-    const head = Bodies.circle(x, y - 50, 15, {
-        label: `head_${playerID}`,
-        collisionFilter: { group },
-        render: { fillStyle: '#ffeaa7' }
-    });
+    const w1 = Bodies.circle(x - 40, y + 25, wheelSize, { collisionFilter: { group }, friction: 1, render: { fillStyle: '#222' } });
+    const w2 = Bodies.circle(x + 40, y + 25, wheelSize, { collisionFilter: { group }, friction: 1, render: { fillStyle: '#222' } });
 
-    const headMount = Constraint.create({
-        bodyA: chassis, bodyB: head,
-        pointA: { x: 0, y: -25 },
-        stiffness: 1, length: 0, render: { visible: false }
-    });
-
-    // Wheels
-    const w1 = Bodies.circle(x - 40, y + 25, wheelSize, { 
-        collisionFilter: { group }, friction: 1, density: 0.05,
-        render: { fillStyle: '#111' }
-    });
-    const w2 = Bodies.circle(x + 40, y + 25, wheelSize, { 
-        collisionFilter: { group }, friction: 1, density: 0.05,
-        render: { fillStyle: '#111' }
-    });
-
-    const s1 = Constraint.create({ bodyA: chassis, bodyB: w1, pointA: {x:-40, y:15}, stiffness: 0.5, length: 5, render: {visible: false} });
-    const s2 = Constraint.create({ bodyA: chassis, bodyB: w2, pointA: {x: 40, y:15}, stiffness: 0.5, length: 5, render: {visible: false} });
+    const s1 = Constraint.create({ bodyA: chassis, bodyB: w1, pointA: {x:-40, y:10}, stiffness: 0.4, length: 10, render: {visible: false} });
+    const s2 = Constraint.create({ bodyA: chassis, bodyB: w2, pointA: {x: 40, y:10}, stiffness: 0.4, length: 10, render: {visible: false} });
 
     Composite.add(engine.world, [chassis, head, headMount, w1, w2, s1, s2]);
-    return { body: chassis, wheels: [w1, w2], speed, head };
+    return { chassis, wheels: [w1, w2], speed, head, color };
 }
 
-// --- BULLETPROOF MAPS ---
+function explode(car) {
+    const pos = car.chassis.position;
+    // Remove original car
+    Composite.remove(engine.world, [car.chassis, car.head, ...car.wheels]);
+
+    // Create 15 flying shards
+    for (let i = 0; i < 15; i++) {
+        const shard = Bodies.polygon(pos.x, pos.y, Math.floor(Math.random() * 3) + 3, Math.random() * 15 + 5, {
+            render: { fillStyle: car.color },
+            frictionAir: 0.02
+        });
+        Body.setVelocity(shard, { x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 20 });
+        Body.setAngularVelocity(shard, Math.random() * 0.5);
+        Composite.add(engine.world, shard);
+    }
+}
+
+// --- EXTENDED MAPS ---
 
 function createMap(type) {
-    const wallOpts = { isStatic: true, render: { fillStyle: '#2d3436' } };
+    const wallOpts = { isStatic: true, render: { fillStyle: '#333' } };
     
-    // 1. MAIN FLOOR (Always exists to stop them from falling off)
+    // Giant Safety Floor and Walls
     Composite.add(engine.world, [
-        Bodies.rectangle(width/2, height - 20, width, 60, wallOpts), // Ground
-        Bodies.rectangle(-20, height/2, 60, height, wallOpts),      // Left wall
-        Bodies.rectangle(width+20, height/2, 60, height, wallOpts)   // Right wall
+        Bodies.rectangle(width/2, height + 40, width * 2, 100, wallOpts),
+        Bodies.rectangle(-40, height/2, 100, height * 2, wallOpts),
+        Bodies.rectangle(width + 40, height/2, 100, height * 2, wallOpts)
     ]);
 
     if (type === 'stadium') {
-        // High ramps on sides
         Composite.add(engine.world, [
-            Bodies.rectangle(150, height - 120, 400, 40, { isStatic: true, angle: 0.6, render: { fillStyle: '#444' } }),
-            Bodies.rectangle(width - 150, height - 120, 400, 40, { isStatic: true, angle: -0.6, render: { fillStyle: '#444' } })
+            Bodies.rectangle(width * 0.2, height - 100, width * 0.4, 40, { isStatic: true, angle: 0.2, render: { fillStyle: '#444' } }),
+            Bodies.rectangle(width * 0.8, height - 100, width * 0.4, 40, { isStatic: true, angle: -0.2, render: { fillStyle: '#444' } })
         ]);
     } else if (type === 'seesaw') {
-        const pivot = Bodies.rectangle(width/2, height-60, 50, 100, wallOpts);
-        const plank = Bodies.rectangle(width/2, height-150, 800, 30, { density: 0.1, render: { fillStyle: '#e67e22' } });
-        const joint = Constraint.create({ bodyA: pivot, bodyB: plank, pointA: {x:0, y:-40}, stiffness: 1 });
-        Composite.add(engine.world, [pivot, plank, joint]);
+        const plank = Bodies.rectangle(width/2, height - 150, width * 0.7, 30, { render: { fillStyle: '#d35400' } });
+        const pivot = Bodies.rectangle(width/2, height - 50, 60, 150, wallOpts);
+        Composite.add(engine.world, [pivot, plank, Constraint.create({ bodyA: pivot, bodyB: plank, pointA: {x:0, y:-60}, stiffness: 1 })]);
     } else if (type === 'ufo') {
         Composite.add(engine.world, [
-            Bodies.rectangle(width/2, height-250, 500, 40, { isStatic: true, render: { fillStyle: '#8e44ad' } }),
-            Bodies.rectangle(width/2, height-500, 300, 40, { isStatic: true, render: { fillStyle: '#8e44ad' } })
+            Bodies.rectangle(width/2, height - 300, 600, 40, { isStatic: true, render: { fillStyle: '#8e44ad' } }),
+            Bodies.rectangle(width * 0.2, height - 450, 300, 30, { isStatic: true, render: { fillStyle: '#9b59b6' } }),
+            Bodies.rectangle(width * 0.8, height - 450, 300, 30, { isStatic: true, render: { fillStyle: '#9b59b6' } })
         ]);
     }
 }
 
-// --- LOOP & INPUT ---
+// --- GAME LOOP ---
 
 const keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
@@ -175,35 +147,30 @@ window.addEventListener('keyup', e => keys[e.code] = false);
 function gameLoop() {
     if (!gameActive) return;
 
-    // Sudden Death
-    if (Date.now() - roundStartTime > 10000) {
+    if (Date.now() - roundStartTime > 15000) {
         waterRising = true;
         document.getElementById('sudden-death').style.display = 'block';
     }
-    if (waterRising) waterLevel += 1.2;
+    if (waterRising) waterLevel += 1.5;
 
-    // P1 (A/D)
     if (keys['KeyD']) drive(p1, 1);
     if (keys['KeyA']) drive(p1, -1);
-    
-    // P2 (Arrows)
     if (keys['ArrowRight']) drive(p2, 1);
     if (keys['ArrowLeft']) drive(p2, -1);
 
-    // Death Check
     if (p1.head.position.y > height - waterLevel) endRound(2);
     if (p2.head.position.y > height - waterLevel) endRound(1);
 }
 
 function drive(car, dir) {
-    car.wheels.forEach(w => Body.setAngularVelocity(w, 0.4 * dir));
-    Body.applyForce(car.body, car.body.position, { x: car.speed * dir, y: 0 });
+    car.wheels.forEach(w => Body.setAngularVelocity(w, 0.5 * dir));
+    Body.applyForce(car.chassis, car.chassis.position, { x: car.speed * dir, y: 0 });
 }
 
 function drawWater() {
     if (waterLevel <= 0) return;
     const ctx = render.context;
-    ctx.fillStyle = 'rgba(0, 180, 255, 0.5)';
+    ctx.fillStyle = 'rgba(0, 200, 255, 0.5)';
     ctx.fillRect(0, height - waterLevel, width, waterLevel);
 }
 
@@ -211,23 +178,23 @@ function handleCollisions(event) {
     if (!gameActive) return;
     event.pairs.forEach(pair => {
         const { bodyA, bodyB } = pair;
-        checkHead(bodyA, bodyB);
-        checkHead(bodyB, bodyA);
+        const check = (h, o) => {
+            if (h.label && h.label.startsWith('head_')) {
+                const id = parseInt(h.label.split('_')[1]);
+                if (o.isStatic || (o.label && !o.label.includes(id))) endRound(id === 1 ? 2 : 1);
+            }
+        };
+        check(bodyA, bodyB); check(bodyB, bodyA);
     });
-}
-
-function checkHead(h, o) {
-    if (h.label && h.label.startsWith('head_')) {
-        const id = parseInt(h.label.split('_')[1]);
-        if (o.isStatic || (o.label && !o.label.includes(id))) {
-            endRound(id === 1 ? 2 : 1);
-        }
-    }
 }
 
 function endRound(winner) {
     if (!gameActive) return;
     gameActive = false;
+    
+    // Explode the loser
+    explode(winner === 1 ? p2 : p1);
+
     winner === 1 ? scores.p1++ : scores.p2++;
     document.getElementById('score-1').innerText = scores.p1;
     document.getElementById('score-2').innerText = scores.p2;
